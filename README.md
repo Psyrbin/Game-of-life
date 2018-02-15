@@ -1,6 +1,6 @@
 # project-template
 
-[![Build Status](https://travis-ci.org/cmc-haskell-2017/project-template.svg?branch=master)](https://travis-ci.org/cmc-haskell-2017/project-template)
+[![Build Status](https://travis-ci.org/cmc-haskell-2018/project-template.svg?branch=master)](https://travis-ci.org/cmc-haskell-2018/project-template)
 
 Шаблон проекта для выполнения практического задания.
 
