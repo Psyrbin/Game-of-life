@@ -1,6 +1,9 @@
 module Main where
 
-import MyProject
+import Life
 
 main :: IO ()
-main = run
+main = do
+    file <- getLine
+    points <- readFile file
+    run points

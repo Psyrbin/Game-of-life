@@ -15,8 +15,9 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-type-defaults
-  exposed-modules:     MyProject
+  exposed-modules:     Life
   build-depends:       base >= 4.7 && < 5
+                     , gloss
   default-language:    Haskell2010
 
 executable my-project
