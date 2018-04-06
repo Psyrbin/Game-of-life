@@ -15,11 +15,18 @@ instance Eq Cell where
 
 type Field = [Cell]
 
+data Game = Game 
+    { field :: Field 
+    , isPaused :: Bool
+    }
 
 
 
 
 
+
+initGame :: String -> Game
+initGame str = Game (getField(words str)) False
 
 updateField :: Field -> Field
 updateField f = nub $ removeDead (updateLiving f f ++ updateNeighbours f f)
@@ -89,8 +96,8 @@ makeGrid :: [Path] -> [Picture]
 makeGrid [] = []
 makeGrid (x:xs) = [line x] ++ makeGrid xs
 
-drawField :: Field -> Picture
-drawField f = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
+drawField :: Game -> Picture
+drawField (Game f _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
 
 drawCell :: Cell -> Picture
 drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellSize / 2) (rectangleSolid cellSize cellSize)
@@ -98,14 +105,26 @@ drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellS
 background :: Color
 background = white
 
-onEvent :: Event -> Field -> Field
-onEvent _ f = f
 
-oneIter :: Float -> Field -> Field
-oneIter _ f = updateField f
 
-run :: String -> IO ()
-run str = play window white 10 (getField $ words str) drawField onEvent oneIter
+
+
+onEvent :: Event -> Game -> Game
+onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game))
+onEvent _ g = g
+
+oneIter :: Float -> Game -> Game
+oneIter _ (Game f True) = Game f True
+oneIter _ (Game f False) = Game (updateField f) False
+
+run :: Game -> IO ()
+run game = play window white 10 game drawField onEvent oneIter
+
+
+
+
+
+
 
 getField :: [String] -> Field
 getField [] = []

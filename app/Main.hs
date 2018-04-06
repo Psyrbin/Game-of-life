@@ -6,4 +6,4 @@ main :: IO ()
 main = do
     file <- getLine
     points <- readFile file
-    run points
+    run (initGame points)
