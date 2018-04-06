@@ -2,7 +2,9 @@ module Life where
 
 import Graphics.Gloss
 import Data.List(nub)
+import Data.Maybe(fromJust)
 import Graphics.Gloss.Interface.Pure.Game
+import Stack
 
 data Cell = Cell
     { xc :: Float
@@ -20,6 +22,7 @@ data Game = Game
     , isPaused :: Bool
     , tillUpdate :: Float
     , updateTimer :: Float
+    , prevFields :: Stack Field
     }
 
 
@@ -28,7 +31,7 @@ data Game = Game
 
 
 initGame :: String -> Game
-initGame str = Game (getField(words str)) False 0.1 0.1
+initGame str = Game (getField(words str)) False 0.1 0.1 Empty
 
 updateField :: Field -> Field
 updateField f = nub $ removeDead (updateLiving f f ++ updateNeighbours f f)
@@ -99,7 +102,7 @@ makeGrid [] = []
 makeGrid (x:xs) = [line x] ++ makeGrid xs
 
 drawField :: Game -> Picture
-drawField (Game f _ _ _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
+drawField (Game f _ _ _ _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
 
 drawCell :: Cell -> Picture
 drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellSize / 2) (rectangleSolid cellSize cellSize)
@@ -112,10 +115,14 @@ background = white
 
 
 onEvent :: Event -> Game -> Game
-onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game)
-onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01)
-onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01)
-onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game)
+onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game) (prevFields game)
+onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01) (prevFields game)
+onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01) (prevFields game)
+onEvent (EventKey (SpecialKey KeyRight) Down _ _) game = Game (updateField $ field game) (isPaused game) (tillUpdate game) (updateTimer game ) (push (prevFields game) (field game) )
+onEvent (EventKey (SpecialKey KeyLeft) Down _ _) game 
+    | isEmpty (prevFields game) = game
+    | otherwise = Game (fromJust(snd $ pop(prevFields game))) (isPaused game) (tillUpdate game) (updateTimer game) (fst $ pop(prevFields game))
+onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game)
     where
         roundCell :: Float -> Float
         roundCell a
@@ -124,10 +131,10 @@ onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = Game ((field gam
 onEvent _ g = g
 
 oneIter :: Float -> Game -> Game
-oneIter _ (Game f True tu ut) = Game f True tu ut
-oneIter t (Game f False tu ut) 
-    | tu <= 0 = Game (updateField f) False (ut - t) ut
-    | otherwise = Game f False (tu - t) ut
+oneIter _ (Game f True tu ut pf) = Game f True tu ut pf
+oneIter t (Game f False tu ut pf) 
+    | tu <= 0 = Game (updateField f) False (ut - t) ut (push pf f)
+    | otherwise = Game f False (tu - t) ut pf
 
 run :: Game -> IO ()
 run game = play window white 30 game drawField onEvent oneIter
