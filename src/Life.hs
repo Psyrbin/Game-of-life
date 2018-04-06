@@ -18,6 +18,8 @@ type Field = [Cell]
 data Game = Game 
     { field :: Field 
     , isPaused :: Bool
+    , tillUpdate :: Float
+    , updateTimer :: Float
     }
 
 
@@ -26,7 +28,7 @@ data Game = Game
 
 
 initGame :: String -> Game
-initGame str = Game (getField(words str)) False
+initGame str = Game (getField(words str)) False 0.1 0.1
 
 updateField :: Field -> Field
 updateField f = nub $ removeDead (updateLiving f f ++ updateNeighbours f f)
@@ -97,7 +99,7 @@ makeGrid [] = []
 makeGrid (x:xs) = [line x] ++ makeGrid xs
 
 drawField :: Game -> Picture
-drawField (Game f _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
+drawField (Game f _ _ _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
 
 drawCell :: Cell -> Picture
 drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellSize / 2) (rectangleSolid cellSize cellSize)
@@ -110,15 +112,25 @@ background = white
 
 
 onEvent :: Event -> Game -> Game
-onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game))
+onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game)
+onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01)
+onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01)
+onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game)
+    where
+        roundCell :: Float -> Float
+        roundCell a
+            | a > 0 = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int))
+            | otherwise = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int) - 1)
 onEvent _ g = g
 
 oneIter :: Float -> Game -> Game
-oneIter _ (Game f True) = Game f True
-oneIter _ (Game f False) = Game (updateField f) False
+oneIter _ (Game f True tu ut) = Game f True tu ut
+oneIter t (Game f False tu ut) 
+    | tu <= 0 = Game (updateField f) False (ut - t) ut
+    | otherwise = Game f False (tu - t) ut
 
 run :: Game -> IO ()
-run game = play window white 10 game drawField onEvent oneIter
+run game = play window white 30 game drawField onEvent oneIter
 
 
 
@@ -139,7 +151,7 @@ windowSize :: Float
 windowSize = 1000
 
 fieldSize :: Float
-fieldSize = 150
+fieldSize = 50
 
 cellSize :: Float
 cellSize =  windowSize / fieldSize
