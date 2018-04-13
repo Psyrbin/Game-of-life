@@ -5,6 +5,7 @@ import Data.List(nub)
 import Data.Maybe(fromJust)
 import Graphics.Gloss.Interface.Pure.Game
 import Stack
+import Graphics.Gloss.Interface.IO.Game
 
 data Cell = Cell
     { xc :: Float
@@ -101,8 +102,8 @@ makeGrid :: [Path] -> [Picture]
 makeGrid [] = []
 makeGrid (x:xs) = [line x] ++ makeGrid xs
 
-drawField :: Game -> Picture
-drawField (Game f _ _ _ _) = color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
+drawField :: Game -> IO Picture
+drawField (Game f _ _ _ _) = return $ color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
 
 drawCell :: Cell -> Picture
 drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellSize / 2) (rectangleSolid cellSize cellSize)
@@ -114,30 +115,33 @@ background = white
 
 
 
-onEvent :: Event -> Game -> Game
-onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game) (prevFields game)
-onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01) (prevFields game)
-onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01) (prevFields game)
-onEvent (EventKey (SpecialKey KeyRight) Down _ _) game = Game (updateField $ field game) (isPaused game) (tillUpdate game) (updateTimer game ) (push (prevFields game) (field game) )
+onEvent :: Event -> Game -> IO Game
+onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = return $ Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game) (prevFields game)
+onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01) (prevFields game)
+onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01) (prevFields game)
+onEvent (EventKey (SpecialKey KeyRight) Down _ _) game = return $ Game (updateField $ field game) (isPaused game) (tillUpdate game) (updateTimer game ) (push (prevFields game) (field game) )
 onEvent (EventKey (SpecialKey KeyLeft) Down _ _) game 
-    | isEmpty (prevFields game) = game
-    | otherwise = Game (fromJust(snd $ pop(prevFields game))) (isPaused game) (tillUpdate game) (updateTimer game) (fst $ pop(prevFields game))
-onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game)
+    | isEmpty (prevFields game) = return $ game
+    | otherwise = return $ Game (fromJust(snd $ pop(prevFields game))) (isPaused game) (tillUpdate game) (updateTimer game) (fst $ pop(prevFields game))
+onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = return $ Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game)
     where
         roundCell :: Float -> Float
         roundCell a
             | a > 0 = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int))
             | otherwise = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int) - 1)
-onEvent _ g = g
+onEvent (EventKey (Char 's') Down _ _) game = saveField game
+onEvent (EventKey (Char 'l') Down _ _) game = loadGame game
+onEvent _ g = return $ g
 
-oneIter :: Float -> Game -> Game
-oneIter _ (Game f True tu ut pf) = Game f True tu ut pf
+
+oneIter :: Float -> Game -> IO Game
+oneIter _ (Game f True tu ut pf) = return $ Game f True tu ut pf
 oneIter t (Game f False tu ut pf) 
-    | tu <= 0 = Game (updateField f) False (ut - t) ut (push pf f)
-    | otherwise = Game f False (tu - t) ut pf
+    | tu <= 0 = return $ Game (updateField f) False (ut - t) ut (push pf f)
+    | otherwise = return $ Game f False (tu - t) ut pf
 
 run :: Game -> IO ()
-run game = play window white 30 game drawField onEvent oneIter
+run game = playIO window white 30 game drawField onEvent oneIter
 
 
 
@@ -153,6 +157,17 @@ getField (cell:rest) = [Cell x y True] ++ getField rest
         x = fst pair
         y = snd pair
 
+saveField :: Game -> IO Game
+saveField g = do writeFile "scenes/save" (fieldToStr (field g))
+                 return g
+    where
+        fieldToStr (cell:xs) = "(" ++ show (xc cell) ++ "," ++ show (yc cell) ++ ") " ++ fieldToStr xs
+        fieldToStr [] = []
+
+
+loadGame :: Game -> IO Game
+loadGame g = do str <- readFile "scenes/save"
+                return $ Game (getField(words str)) (isPaused g) (tillUpdate g) (updateTimer g) (prevFields g)
 
 windowSize :: Float
 windowSize = 1000
