@@ -24,6 +24,7 @@ data Game = Game
     , tillUpdate :: Float
     , updateTimer :: Float
     , prevFields :: Stack Field
+    , mouseDown :: Bool
     }
 
 
@@ -32,7 +33,7 @@ data Game = Game
 
 
 initGame :: String -> Game
-initGame str = Game (getField(words str)) False 0.1 0.1 Empty
+initGame str = Game (getField(words str)) False 0.1 0.1 Empty False
 
 updateField :: Field -> Field
 updateField f = nub $ removeDead (updateLiving f f ++ updateNeighbours f f)
@@ -103,7 +104,7 @@ makeGrid [] = []
 makeGrid (x:xs) = [line x] ++ makeGrid xs
 
 drawField :: Game -> IO Picture
-drawField (Game f _ _ _ _) = return $ color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
+drawField (Game f _ _ _ _ _) = return $ color black $ pictures (map drawCell f ++ makeGrid (makeLineCoords (-windowSize) (-windowSize) (windowSize * 2 / cellSize)))
 
 drawCell :: Cell -> Picture
 drawCell c = translate (xc c * cellSize + cellSize / 2) (yc c * cellSize + cellSize / 2) (rectangleSolid cellSize cellSize)
@@ -113,32 +114,42 @@ background = white
 
 
 
+roundCell :: Float -> Float
+roundCell a
+    | a > 0 = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int))
+    | otherwise = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int) - 1)
+
+
 
 
 onEvent :: Event -> Game -> IO Game
-onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = return $ Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game) (prevFields game)
-onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01) (prevFields game)
-onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01) (prevFields game)
-onEvent (EventKey (SpecialKey KeyRight) Down _ _) game = return $ Game (updateField $ field game) (isPaused game) (tillUpdate game) (updateTimer game ) (push (prevFields game) (field game) )
+onEvent (EventMotion (x, y)) game 
+    | mouseDown game = return $ Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game) True
+    | otherwise = return game
+onEvent (EventKey (SpecialKey KeySpace) Down _ _) game = return $ Game (field game) (not (isPaused game)) (tillUpdate game) (updateTimer game) (prevFields game) (mouseDown game)
+onEvent (EventKey (SpecialKey KeyUp) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game - 0.01) (prevFields game) (mouseDown game)
+onEvent (EventKey (SpecialKey KeyDown) Down _ _) game = return $ Game (field game) (isPaused game) (tillUpdate game) (updateTimer game + 0.01) (prevFields game) (mouseDown game)
+onEvent (EventKey (SpecialKey KeyRight) Down _ _) game = return $ Game (updateField $ field game) (isPaused game) (tillUpdate game) (updateTimer game ) (push (prevFields game) (field game) ) (mouseDown game)
 onEvent (EventKey (SpecialKey KeyLeft) Down _ _) game 
     | isEmpty (prevFields game) = return $ game
-    | otherwise = return $ Game (fromJust(snd $ pop(prevFields game))) (isPaused game) (tillUpdate game) (updateTimer game) (fst $ pop(prevFields game))
-onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = return $ Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game)
-    where
-        roundCell :: Float -> Float
-        roundCell a
-            | a > 0 = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int))
-            | otherwise = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int) - 1)
+    | otherwise = return $ Game (fromJust(snd $ pop(prevFields game))) (isPaused game) (tillUpdate game) (updateTimer game) (fst $ pop(prevFields game)) (mouseDown game)
+onEvent (EventKey (MouseButton LeftButton) Down _ (x,y)) game = return $ Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game) True
+--    where
+--        roundCell :: Float -> Float
+--       roundCell a
+--            | a > 0 = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int))
+--            | otherwise = fromIntegral(quot (round (a) :: Int) (round cellSize :: Int) - 1)
+onEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) game = return $ Game ((field game) ++ [Cell (roundCell x) (roundCell y) True]) (isPaused game) (tillUpdate game) (updateTimer game) (prevFields game) False
 onEvent (EventKey (Char 's') Down _ _) game = saveField game
 onEvent (EventKey (Char 'l') Down _ _) game = loadGame game
 onEvent _ g = return $ g
 
 
 oneIter :: Float -> Game -> IO Game
-oneIter _ (Game f True tu ut pf) = return $ Game f True tu ut pf
-oneIter t (Game f False tu ut pf) 
-    | tu <= 0 = return $ Game (updateField f) False (ut - t) ut (push pf f)
-    | otherwise = return $ Game f False (tu - t) ut pf
+oneIter _ (Game f True tu ut pf md) = return $ Game f True tu ut pf md
+oneIter t (Game f False tu ut pf md) 
+    | tu <= 0 = return $ Game (updateField f) False (ut - t) ut (push pf f) md
+    | otherwise = return $ Game f False (tu - t) ut pf md
 
 run :: Game -> IO ()
 run game = playIO window white 30 game drawField onEvent oneIter
@@ -167,7 +178,7 @@ saveField g = do writeFile "scenes/save" (fieldToStr (field g))
 
 loadGame :: Game -> IO Game
 loadGame g = do str <- readFile "scenes/save"
-                return $ Game (getField(words str)) (isPaused g) (tillUpdate g) (updateTimer g) (prevFields g)
+                return $ Game (getField(words str)) (isPaused g) (tillUpdate g) (updateTimer g) (prevFields g) (mouseDown g)
 
 windowSize :: Float
 windowSize = 1000
